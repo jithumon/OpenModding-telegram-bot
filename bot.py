@@ -613,6 +613,50 @@ def msgalert(bot, update, args):
         bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML)
 
 """
+### FEEDBACK ENGINE
+"""
+def feedback_leave_start(bot, update):
+    text = "Have you got any suggestions to improve the bot? Have you got a problem, bug, " \
+           "or your favourite ROM isn't there? Write it here with a reply to this message!"
+    reply_markup = ReplyKeyboardMarkup([[KeyboardButton("Cancel")]], one_time_keyboard=True, selective=True,
+                                       resize_keyboard=True)
+    update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+    return (0)
+
+def feedback_leave_done(bot, update, user_data):
+    feedback = update.message.text
+    user_id = update.message.from_user.id
+    db.feedback_submit(user_id, feedback)
+    text = "Thank you for your feedback!"
+    devices = db.get_all_devices_roms()
+    keyboard = do_keyboard(devices)
+    reply_markup = ReplyKeyboardMarkup(keyboard, selective=True, one_time_keyboard=True)
+    update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+    text = "New feedback received."
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query_db = cursor.execute("SELECT id FROM users WHERE privs=-2")
+    for chat_id in query_db:
+        try:
+            bot.sendMessage(chat_id=chat_id["id"], text=text)
+            print("Sent to [%s]" % chat_id["id"])
+        except:
+            print("[%s] failed" % chat_id["id"])
+    return (ConversationHandler.END)
+
+def feedback_leave_cancel(bot, update, user_data):
+    text = "Action cancelled."
+    devices = db.get_all_devices_roms()
+    keyboard = do_keyboard(devices)
+    reply_markup = ReplyKeyboardMarkup(keyboard, selective=True, one_time_keyboard=True)
+    update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+    return (ConversationHandler.END)
+
+"""
 ### MAIN
 """
 def error(bot, update, error):
@@ -683,6 +727,13 @@ def main():
 
     # Send a message to all the users registered in the db, no matter if they doesn't want notifications from the bot
     dp.add_handler(CommandHandler("alertsend", msgalert, pass_args=True))
+
+    # Leave Feedback
+    dp.add_handler(ConversationHandler(entry_points=[RegexHandler("^Leave a Feedback!$", feedback_leave_start)],
+                                       states={0: [
+                                           RegexHandler("^(?!^Cancel$).*$", feedback_leave_done, pass_user_data=True)]},
+                                       fallbacks=[
+                                           RegexHandler("^Cancel$", feedback_leave_cancel, pass_user_data=True)]))
 
     # Log all errors
     dp.add_error_handler(error)
