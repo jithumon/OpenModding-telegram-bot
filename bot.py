@@ -176,6 +176,44 @@ class DBHandler:
         handle.commit()
 
 """
+### UTILITY
+"""
+def group(lst, n):
+    result = ()
+    temp = ()
+    x = 1
+    for i, item in enumerate(lst):
+        temp += (item,)
+        if x % n == 0:
+            x = 1
+            result += (temp,)
+            temp = ()
+        else:
+            x += 1
+        if i == len(lst) - 1 and temp:
+            result += (temp,)
+    return (result)
+
+def group_links(links, name):
+    text = "<b>%s:</b>\n" % (name)
+    for link in links:
+        text += "  <a href=\"%s\">%s</a>\n" % (link["link"], link["name"])
+    return text
+
+def do_keyboard(lst):
+    keyboard = []
+    temp = []
+    groups = group(lst, 2)
+    for grouped in groups:
+        for device in grouped:
+            temp += [KeyboardButton(device["name"])]
+        keyboard += [temp]
+        temp = []
+    keyboard += [[KeyboardButton("Leave a Feedback!")]]
+    keyboard += [[KeyboardButton("Close Keyboard")]]
+    return (keyboard)
+
+"""
 ### MAIN
 """
 def error(bot, update, error):
