@@ -700,10 +700,6 @@ def main():
     dp.add_handler(CommandHandler("nokeyboard", nokeyboard))
     dp.add_handler(CommandHandler("nkb", nokeyboard))
 
-    # Keyboard Button Reply
-    dp.add_handler(MessageHandler(Filters.text |
-                                  Filters.status_update, message_handler))
-
     # Show you the received feedbacks
     dp.add_handler(CommandHandler('feedread', feedread))
 
@@ -734,7 +730,11 @@ def main():
                                            RegexHandler("^(?!^Cancel$).*$", feedback_leave_done, pass_user_data=True)]},
                                        fallbacks=[
                                            RegexHandler("^Cancel$", feedback_leave_cancel, pass_user_data=True)]))
-
+    
+    # Keyboard Button Reply
+    dp.add_handler(MessageHandler(Filters.text |
+                                  Filters.status_update, message_handler))
+       
     # Log all errors
     dp.add_error_handler(error)
 
