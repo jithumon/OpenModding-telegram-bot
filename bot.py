@@ -257,6 +257,85 @@ def inline_query(bot, update):
     bot.answerInlineQuery(query.id, results=results)
 
 """
+### INLINE CALLBACK 
+"""
+def inline_button_callback(bot, update):
+    query = update.callback_query
+    text = ""
+    keyboard = []
+    query_data = query.data.split(".")
+    if query_data[0] == "main":
+        text = "Choose something."
+        temp = []
+        devices = db.get_all_devices_roms()
+        groups = group(devices, 2)
+        for grouped in groups:
+            for device in grouped:
+                temp += [InlineKeyboardButton(device["name"], callback_data="show.%s" % device["db_name"])]
+            keyboard += [temp]
+            temp = []
+    elif query_data[0] == "show":
+        device = db.get_device(query_data[1])
+        text = group_links(db.get_links(device["id"]), device["name"])
+        keyboard = [[InlineKeyboardButton("Main Menù", callback_data="main")]]
+    elif query_data[0] == "feedback":
+        if query_data[1] == "unread" or query_data[1] == "all":
+            if query_data[1] == "unread":
+                unread_db = db.feedback_get_unread()
+            else:
+                unread_db = db.feedback_get_unread(True)
+            keyboard = []
+            if unread_db:
+                text = "Choose the feedback to read."
+                unread_groups = group(group(unread_db, 2), 5)
+                temp = []
+                for groups in unread_groups[0]:
+                    for grouped in groups:
+                        lenght = 25
+                        if len(grouped["text"]) > lenght:
+                            button_text = "%s [...]" % (grouped["text"][:lenght].strip())
+                        else:
+                            button_text = "%s" % (grouped["text"][:lenght].strip())
+                        temp += [InlineKeyboardButton(button_text, callback_data="feedback.read.%s" % grouped["id"])]
+                    keyboard += [temp]
+                    temp = []
+            else:
+                text = "Nothing to read."
+            keyboard += [[InlineKeyboardButton("Go back", callback_data="feedback.menu")]]
+        elif query_data[1] == "menu":
+            text = "What do you want to read?"
+            keyboard = [[InlineKeyboardButton("Unread feedbacks", callback_data="feedback.unread")],
+                        [InlineKeyboardButton("All feedbacks", callback_data="feedback.all")]]
+        elif query_data[1] == "read":
+            feedback = db.feedback_get(query_data[2])
+            db.feedback_set_read(query_data[2])
+            name = ""
+            username = ""
+            if feedback["first_name"]:
+                name += feedback["first_name"]
+            if feedback["last_name"]:
+                name += " %s" % feedback["last_name"]
+            if feedback["username"]:
+                username += " (@%s) " % feedback["username"]
+            text += "From <b>%s</b>%s[ID: <i>%s</i>]\n\n%s" % (
+            name.strip(), username, feedback["user_id"], feedback["feedback"])
+            keyboard += [[InlineKeyboardButton("Go back", callback_data="feedback.unread")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if text:
+        if query.message:
+            bot.editMessageText(text=text, chat_id=query.message.chat_id, message_id=query.message.message_id,
+                                reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        else:
+            bot.editMessageText(text=text, inline_message_id=query.inline_message_id, reply_markup=reply_markup,
+                                parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    elif keyboard:
+        if query.message:
+            bot.editMessageReplyMarkup(chat_id=query.message.chat_id, message_id=query.message.message_id,
+                                       reply_markup=reply_markup)
+        else:
+            bot.editMessageReplyMarkup(inline_message_id=query.inline_message_id, reply_markup=reply_markup)
+
+"""
 ### MAIN
 """
 def error(bot, update, error):
@@ -273,6 +352,9 @@ def main():
 
     # Inline Query Handler
     dp.add_handler(InlineQueryHandler(inline_query))
+
+    # Inline Callback
+    dp.add_handler(CallbackQueryHandler(inline_button_callback))
 
     # Log all errors
     dp.add_error_handler(error)
