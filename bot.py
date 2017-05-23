@@ -335,6 +335,283 @@ def inline_button_callback(bot, update):
         else:
             bot.editMessageReplyMarkup(inline_message_id=query.inline_message_id, reply_markup=reply_markup)
 
+
+"""
+### COMMANDS
+"""
+def start(bot, update):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    # The bot will automatically create the right db if it not exist
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS `devices` ( `id` INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, `name` TEXT, `codename`"
+        " TEXT )")
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS `feedback` ( `id` INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, `user_id` INTEGER,"
+        " `text` TEXT, `read` INTEGER DEFAULT 0 )")
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS `roms` ( `id` INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, `device_id` INTEGER, `link`"
+        " TEXT, `name` TEXT )")
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS `users` ( `id` INTEGER UNIQUE, `name_first` TEXT, `name_last` TEXT, `username` TEXT,"
+        " `privs` INTEGER, `last_use` INTEGER, `time_used` INTEGER, `notifications` INTEGER DEFAULT 1"
+        ", PRIMARY KEY(`id`))")
+    handle.commit()
+    db.update_user(update.message.from_user)
+    text = """Hello! In this bot you can find everything about your device modding, say /help if you want to know more!
+Quick Tip: try /menu !
+Use /yes if you want to receive notifications and /no if you don't want to receive them"""
+    devices = db.get_all_devices_roms()
+    keyboard = []
+    temp = []
+
+    groups = group(devices, 2)
+    for grouped in groups:
+        for device in grouped:
+            temp += [KeyboardButton(device["name"])]
+        keyboard += [temp]
+        temp = []
+    keyboard += [[KeyboardButton("Close Keyboard")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, selective=True)
+    update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+
+def yes(bot, update):
+    db.update_user(update.message.from_user)
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    cursor.execute("UPDATE users SET notifications=1 WHERE id=?", (update.message.from_user.id,))
+    handle.commit()
+    text = "Notifications permissions has been updated"
+    update.message.reply_text(text=text)
+
+def no(bot, update):
+    db.update_user(update.message.from_user)
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    cursor.execute("UPDATE users SET notifications=2 WHERE id=?", (update.message.from_user.id,))
+    handle.commit()
+    text = "Notifications permissions has been updated"
+    update.message.reply_text(text=text)
+
+def help(bot, update):
+    db.update_user(update.message.from_user)
+    text = """<b>Commands: </b>
+/kb or /keyboard - Brings the normal keyboard up.
+/nkb or /nokeyboard - Brings the annoying keyboard down!
+/menu - Shows the inline menù! It's cool!
+/credits - Shows who made this for you!
+/help - Shows this help message.
+
+I work <b>Inline</b> too! Just type <b>@the_username_of_this_bot</b> to see the complete list or put something after """ \
+"""that to do a quick search, like <b>@the_username_of_this_bot nougat</b>.
+           
+<b>If you want to send a feedback: </b>
+Just close the keyboard ( /nkb ) and reopen it ( /kb ), now you'll able to see the feedback button in the keyboard.
+           
+Use /yes to turn on notifications and /no if you don't want to receive them"""
+    update.message.reply_text(text=text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+def credits(bot, update):
+    db.update_user(update.message.from_user)
+    text = "Made and maintained by @Tostapunk"
+    update.message.reply_text(text=text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+def keyboard(bot, update):
+    db.update_user(update.message.from_user)
+    text = "Keyboard is up."
+    devices = db.get_all_devices_roms()
+    keyboard = do_keyboard(devices)
+    reply_markup = ReplyKeyboardMarkup(keyboard, selective=True, one_time_keyboard=True)
+    update.message.reply_text(reply_markup=reply_markup, text=text, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+
+def nokeyboard(bot, update):
+    db.update_user(update.message.from_user)
+    text = "Keyboard is down."
+    reply_markup = ReplyKeyboardHide()
+    update.message.reply_text(reply_markup=reply_markup, text=text, parse_mode=ParseMode.HTML,
+                              disable_web_page_preview=True)
+
+def message_handler(bot, update):
+    db.update_user(update.message.from_user)
+    if update.message.text == "Close Keyboard":
+        text = "Keyboard is down."
+        reply_markup = ReplyKeyboardHide()
+        update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode=ParseMode.HTML,
+                                  disable_web_page_preview=True)
+    else:
+        device = db.get_device(update.message.text)
+        if "error" not in device:
+            links = db.get_links(device["id"])
+            if "error" not in links:
+                text = group_links(links, device["name"])
+                update.message.reply_text(text=text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+def feedread(bot, update):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        text = "What do you want to read?"
+        keyboard = [[InlineKeyboardButton("Unread feedbacks", callback_data="feedback.unread")],
+                    [InlineKeyboardButton("All feedbacks", callback_data="feedback.all")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        bot.sendMessage(chat_id=update.message.chat.id, reply_markup=reply_markup, text=text, parse_mode=ParseMode.HTML,
+                        disable_web_page_preview=True)
+
+def menu(bot, update):
+    db.update_user(update.message.from_user)
+    text = "Choose something."
+    keyboard = []
+    temp = []
+    devices = db.get_all_devices_roms()
+    groups = group(devices, 2)
+    for grouped in groups:
+        for device in grouped:
+            temp += [InlineKeyboardButton(device["name"], callback_data="show.%s" % device["db_name"])]
+        keyboard += [temp]
+        temp = []
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    bot.sendMessage(chat_id=update.message.chat.id, reply_markup=reply_markup, text=text, parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True)
+
+def add_link(bot, update, args):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        if len(args) > 2:
+            link = args[0]
+            device_name = args[1]
+            name = " ".join(args[2:])
+            pattern = (r'^(?:http|ftp)s?://'
+                       r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'
+                       r'localhost|'
+                       r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+                       r'(?::\d+)?'
+                       r'(?:/?|[/?]\S+)$')
+            link_check = re.compile(pattern, re.IGNORECASE)
+            match = link_check.match(link)
+            if match:
+                devices = db.get_all_devices_roms()
+                device_id = None
+                for device in devices:
+                    if device_name.lower() == device["db_name"]:
+                        device_id = device["id"]
+                if device_id:
+                    db.add_link(device_id, link, name)
+                    text = "Added <b>%s</b> successfully." % (name)
+                else:
+                    text = ""
+                    text += "No device with that name.\n\n"
+                    text += "Devices avaiable:"
+                    for device in devices:
+                        text += "\n  <b>%s</b>" % device["db_name"]
+            else:
+                text = "Invalid URL."
+        else:
+            text = ""
+            text += "Too few arguments.\n\n"
+            text += "Required arguments are, in this order:\n"
+            text += "  <b>Link</b>\n"
+            text += "  <b>Device name</b>\n"
+            text += "  <b>Link name</b>"
+    else:
+        text = "You are not an admin."
+    bot.sendMessage(chat_id=update.message.chat.id, text=text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+def ban(bot, update, args):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        bot.kickChatMember(update.message.chat_id, update.message.reply_to_message.from_user.id)
+        text = "Bye bye"
+    else:
+        text = "You are not an admin."
+    bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
+
+def adminhelp(bot, update):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        text = """<b>Admin commands:</b>
+/feedread | to read the feedbacks
+/add <b>Link Device name Link name</b> | to add something (rom, kernel, guide ecc..)
+/check | to check if the bot is connected and fully working
+/send <b>message</b> | to send a message to all the users that have started the bot and accepted to receive """ \
+"""notifications(you can use HTML tags for the text)
+/alertsend <b>message</b> | to send a message to all the users that have started the bot, no matter if they want""" \
+"""notifications(you can use HTML tags for the text)
+/ban | you know it."""
+    else:
+        text = "You are not an admin."
+    bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
+
+def check(bot, update):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        text = "Bot online."
+    else:
+        text = "You are not an admin."
+    bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML)
+
+def msgtousr(bot, update, args):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        text = update.message.text[6:]
+        handle = sqlite3.connect('modding.sqlite')
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        query_db = cursor.execute("SELECT id FROM users WHERE notifications=1")
+        for chat_id in query_db:
+            try:
+                bot.sendMessage(chat_id=chat_id["id"], text=text, parse_mode=ParseMode.HTML
+                                , disable_web_page_preview="true")
+                print("Sent to [%s]" % chat_id["id"])
+            except:
+                print("[%s] failed" % chat_id["id"])
+    else:
+        text = "You are not an admin."
+        bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML)
+
+def msgalert(bot, update, args):
+    handle = sqlite3.connect('modding.sqlite')
+    handle.row_factory = sqlite3.Row
+    cursor = handle.cursor()
+    query = cursor.execute("SELECT privs FROM users WHERE id=?", (update.message.from_user.id,)).fetchone()
+    if query["privs"] == -2:
+        text = update.message.text[11:]
+        handle = sqlite3.connect('modding.sqlite')
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        query_db = cursor.execute("SELECT id FROM users").fetchall()
+        for chat_id in query_db:
+            try:
+                bot.sendMessage(chat_id=chat_id["id"], text=text, parse_mode=ParseMode.HTML
+                                , disable_web_page_preview="true")
+                print("Sent to [%s]" % chat_id["id"])
+            except:
+                print("[%s] failed" % chat_id["id"])
+    else:
+        text = "You are not an admin, go away."
+        bot.sendMessage(update.message.chat_id, text=text, parse_mode=ParseMode.HTML)
+
 """
 ### MAIN
 """
@@ -355,6 +632,57 @@ def main():
 
     # Inline Callback
     dp.add_handler(CallbackQueryHandler(inline_button_callback))
+
+    # Start
+    dp.add_handler(CommandHandler("start", start))
+
+    # Set that the user want to receive messages from the bot (/send function messages)
+    dp.add_handler(CommandHandler('yes', yes))
+
+    # Set that the user doesn't want to receive messages from the bot (/send function messages)
+    dp.add_handler(CommandHandler('no', no))
+
+    # Help
+    dp.add_handler(CommandHandler("help", help))
+
+    # Shows who made this bot
+    dp.add_handler(CommandHandler("credits", credits))
+
+    # Send keyboard up
+    dp.add_handler(CommandHandler("keyboard", keyboard))
+    dp.add_handler(CommandHandler("kb", keyboard))
+
+    # Send keyboard down
+    dp.add_handler(CommandHandler("nokeyboard", nokeyboard))
+    dp.add_handler(CommandHandler("nkb", nokeyboard))
+
+    # Keyboard Button Reply
+    dp.add_handler(MessageHandler(Filters.text |
+                                  Filters.status_update, message_handler))
+
+    # Show you the received feedbacks
+    dp.add_handler(CommandHandler('feedread', feedread))
+
+    # Inline Menù
+    dp.add_handler(CommandHandler("menu", menu))
+
+    # Add Link
+    dp.add_handler(CommandHandler("add", add_link, pass_args=True))
+
+    # Ban
+    dp.add_handler(CommandHandler('ban', ban, pass_args=True))
+
+    # Help commands for admins
+    dp.add_handler(CommandHandler("adminhelp", adminhelp))
+
+    # Connection test
+    dp.add_handler(CommandHandler("check", check))
+
+    # Send a message to all the users that have the value 1 on the notifications column
+    dp.add_handler(CommandHandler("send", msgtousr, pass_args=True))
+
+    # Send a message to all the users registered in the db, no matter if they doesn't want notifications from the bot
+    dp.add_handler(CommandHandler("alertsend", msgalert, pass_args=True))
 
     # Log all errors
     dp.add_error_handler(error)
