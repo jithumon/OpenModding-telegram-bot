@@ -214,6 +214,13 @@ def do_keyboard(lst):
     return (keyboard)
 
 """
+### GLOBALS
+"""
+def setGlobals():
+    global db
+    db = DBHandler("modding.sqlite")
+
+"""
 ### MAIN
 """
 def error(bot, update, error):
@@ -224,6 +231,9 @@ def main():
     updater = Updater('INSERT YOUR TOKEN HERE')
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
+
+    # Set Database Handler as global class
+    setGlobals()
 
     # Log all errors
     dp.add_error_handler(error)
