@@ -221,6 +221,42 @@ def setGlobals():
     db = DBHandler("modding.sqlite")
 
 """
+### INLINE QUERY
+"""
+def inline_query(bot, update):
+    query = update.inline_query
+    db.update_user(query.from_user)
+    results = list()
+    if query.query == "":
+        devices = db.get_all_devices_roms()
+    else:
+        devices = (db.get_device(query.query),)
+        links_db = db.link_search(query.query, True)
+        if links_db:
+            text = "Here are all links containing \"%s\" word.\n\n" % (query.query)
+            for key in links_db.keys():
+                text += "<b>%ss</b>\n" % (key)
+                for rom in links_db[key]:
+                    text += "<a href=\"%s\">%s</a>\n" % (rom["link"], rom["name"])
+                text += "\n"
+            results.append(InlineQueryResultArticle(id=uuid4(),
+                                                    title="All links containing \"%s\" word." % (query.query),
+                                                    input_message_content=InputTextMessageContent(text,
+                                                                                    parse_mode=ParseMode.HTML,
+                                                                                    disable_web_page_preview=True), ))
+    for device in devices:
+        if "error" not in device:
+            links = db.get_links(device["id"])
+            if "error" not in links:
+                text = group_links(links, device["name"])
+                results.append(InlineQueryResultArticle(id=uuid4(),
+                                                        title=device["name"],
+                                                        input_message_content=InputTextMessageContent(text,
+                                                                                    parse_mode=ParseMode.HTML,
+                                                                                    disable_web_page_preview=True), ))
+    bot.answerInlineQuery(query.id, results=results)
+
+"""
 ### MAIN
 """
 def error(bot, update, error):
@@ -234,6 +270,9 @@ def main():
 
     # Set Database Handler as global class
     setGlobals()
+
+    # Inline Query Handler
+    dp.add_handler(InlineQueryHandler(inline_query))
 
     # Log all errors
     dp.add_error_handler(error)
