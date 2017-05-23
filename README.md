@@ -15,7 +15,8 @@ Example of my bot for kenzo users: [KenzoModding_bot](http://t.me/KenzoModding_b
 ### Prerequisites
 
 Python 2.7, and requirements.txt 
-Add your [http://t.me/BotFather](BotFather) token here:![alt tag](http://i.imgur.com/ufcz8ic.png)
+
+Add your [BotFather](http://t.me/BotFather) token here:![alt tag](http://i.imgur.com/ufcz8ic.png)
 
 ### Start it
 
